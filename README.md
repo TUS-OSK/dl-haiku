@@ -6,4 +6,5 @@
 ## 自己紹介
 
 - ilim です
+- charon です
 - Mashu(fymeu) です。18才です
