@@ -1,7 +1,7 @@
-# dl-everybody-dance-now
+# dl-haiku
 
 理大祭制作
-[Everybody Dance Now](https://arxiv.org/abs/1808.07371)の実装
+俳句の生成をやることになった
 
 ## 自己紹介
 
