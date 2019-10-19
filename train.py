@@ -15,6 +15,8 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from torchvision import datasets, transforms
 
+from models import SampleNet
+
 mb: ConsoleMasterBar
 writer: SummaryWriter
 
@@ -102,7 +104,7 @@ def main() -> None:
         batch_size=args.test_batch_size, shuffle=True, **kwargs)
 
     # model, optimizerの用意
-    model = Net().to(device)
+    model = SampleNet().to(device)
     optimizer = optim.Adam(model.parameters())
 
     # toolsの用意
