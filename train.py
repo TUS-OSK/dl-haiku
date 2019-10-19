@@ -15,6 +15,7 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from torchvision import datasets, transforms
 
+from dataset import SampleDataset
 from models import SampleNet
 
 mb: ConsoleMasterBar
@@ -90,18 +91,11 @@ def main() -> None:
 
     # Datasetの設定
     train_loader = DataLoader(
-        datasets.MNIST('../data', train=True, download=True,
-                       transform=transforms.Compose([
-                           transforms.ToTensor(),
-                           transforms.Normalize((0.1307,), (0.3081,))
-                       ])),
+        SampleDataset("", train=True),
         batch_size=args.batch_size, shuffle=True, **kwargs)
     test_loader = torch.utils.data.DataLoader(
-        datasets.MNIST('../data', train=False, transform=transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize((0.1307,), (0.3081,))
-        ])),
-        batch_size=args.test_batch_size, shuffle=True, **kwargs)
+        SampleDataset("", train=False),
+        batch_size=args.test_batch_size, shuffle=False, **kwargs)
 
     # model, optimizerの用意
     model = SampleNet().to(device)
