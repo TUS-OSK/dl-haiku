@@ -46,29 +46,30 @@ if __name__ == '__main__':
     test_input = torch.from_numpy(data[:3, :-1])
     test_target = torch.from_numpy(data[:3, 1:])
     # build the model
-    seq = Sequence()
-    seq.double()
-    criterion = nn.MSELoss()
+    seq = Sequence()                                    #Sequenceクラスをseqで初期化(init関数が実行される)
+    seq.double()                                        #型の変換??
+    criterion = nn.MSELoss()                            #二乗誤差（L2）
     # use LBFGS as optimizer since we can load the whole data to train
-    optimizer = optim.LBFGS(seq.parameters(), lr=0.8)
+    optimizer = optim.LBFGS(seq.parameters(), lr=0.8)   #勾配降下法（学習率0.8）
     #begin to train
     for i in range(15):
         print('STEP: ', i)
         def closure():
-            optimizer.zero_grad()
-            out = seq(input)
-            loss = criterion(out, target)
-            print('loss:', loss.item())
-            loss.backward()
-            return loss
-        optimizer.step(closure)
+            optimizer.zero_grad()                       #勾配の初期化
+            out = seq(input)                            #inputを引数にSequenceクラスを実行
+            #forward関数は記述されないのか（input.forward()）??
+            loss = criterion(out, target)               #out(=outputs??)とtargetの二乗誤差
+            print('loss:', loss.item())                 #itemとは??
+            loss.backward()                             #勾配の計算
+            return loss                                 #lossをreturn
+        optimizer.step(closure)                         #パラメータの更新 #closureは再計算、RNNで使われる
         # begin to predict, no need to track gradient here
-        with torch.no_grad():
-            future = 1000
+        with torch.no_grad():                           #ファイルを開かないのになぜwithを使うか??
+            future = 1000                               #RNNの回転数
             pred = seq(test_input, future=future)
             loss = criterion(pred[:, :-future], test_target)
             print('test loss:', loss.item())
-            y = pred.detach().numpy()
+            y = pred.detach().numpy()                   #detachは何をするか??
         # draw the result
         plt.figure(figsize=(30,10))
         plt.title('Predict future values for time sequences\n(Dashlines are predicted values)', fontsize=30)
