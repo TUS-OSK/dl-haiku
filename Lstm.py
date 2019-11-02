@@ -4,9 +4,8 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 import matplotlib
-matplotlib.use('Agg')
+matplotlib.use('Agg')                   #AGGを指定することでsavefig(最後)の時PNGファイルを出力する
 import matplotlib.pyplot as plt
-
 class Sequence(nn.Module):
     def __init__(self):
         super(Sequence, self).__init__()
@@ -37,8 +36,8 @@ class Sequence(nn.Module):
 
 if __name__ == '__main__':
     # set random seed to 0
-    np.random.seed(0)
-    torch.manual_seed(0)
+    np.random.seed(0)                                   #何に使う??
+    torch.manual_seed(0)                                #   〃
     # load data and make training set
     data = torch.load('traindata.pt')
     input = torch.from_numpy(data[3:, :-1])
@@ -66,7 +65,7 @@ if __name__ == '__main__':
         # begin to predict, no need to track gradient here
         with torch.no_grad():                           #ファイルを開かないのになぜwithを使うか??
             future = 1000                               #RNNの回転数
-            pred = seq(test_input, future=future)
+            pred = seq(test_input, future=future)       
             loss = criterion(pred[:, :-future], test_target)
             print('test loss:', loss.item())
             y = pred.detach().numpy()                   #detachは何をするか??
@@ -83,5 +82,5 @@ if __name__ == '__main__':
         draw(y[0], 'r')
         draw(y[1], 'g')
         draw(y[2], 'b')
-        plt.savefig('predict%d.pdf'%i)
-        plt.close()
+        plt.savefig('predict%d.pdf'%i)                  #PNGファイルを出力
+        plt.close()                                     #おわり
