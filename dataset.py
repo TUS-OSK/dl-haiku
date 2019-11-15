@@ -2,10 +2,10 @@
 import csv
 from typing import Dict, List, Tuple
 
+import torch
 from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import Dataset
 from tqdm import tqdm
-import torch
 
 
 class SampleDataset(Dataset):

@@ -42,8 +42,7 @@ def train(args: argparse.Namespace, model: nn.Module, device: torch.device, trai
             writer.add_scalar('train/loss', loss.item(), n_iter)
 
 
-def test(args: argparse.Namespace, model: nn.Module, device: torch.device, test_loader: DataLoader,
-         epoch: int) -> None:
+def test(args: argparse.Namespace, model: nn.Module, device: torch.device, test_loader: DataLoader, epoch: int) -> None:
     model.eval()
 
     test_loss: float = 0
