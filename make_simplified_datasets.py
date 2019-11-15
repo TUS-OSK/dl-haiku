@@ -48,17 +48,9 @@ def make_data() -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="dataset maker")
-    parser.add_argument(
-        "-s",
-        "--dataset-size",
-        type=int,
-        default=10000,
-        metavar="N",
-        help="size of dataset (default: 10000)",
-    )
-    parser.add_argument(
-        "-o", "--output", type=str, default="dataset.csv", help="file name of output"
-    )
+    parser.add_argument("-n", "--dataset-size", type=int, default=10000,
+                        metavar="N", help="size of dataset (default: 10000)")
+    parser.add_argument("-o", "--output", type=str, default="dataset.csv", help="file name of output")
     args = parser.parse_args()
     print(json.dumps(args.__dict__, indent=2))
 
