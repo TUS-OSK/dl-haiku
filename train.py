@@ -29,8 +29,10 @@ def train(args: argparse.Namespace, model: nn.Module, device: torch.device, trai
         data = data.to(device)
         optimizer.zero_grad()
 
-        output = model(data)
+        output, hc, reconstructioned_hc, z = model(data)
         loss = F.cross_entropy(output.view(-1, output.size(2)), data.view(-1), ignore_index=0)
+        loss += F.mse_loss(hc, reconstructioned_hc)
+        loss += F.mse_loss(z, torch.zeros_like(z))
 
         loss.backward()
         optimizer.step()
@@ -59,9 +61,11 @@ def test(args: argparse.Namespace, model: nn.Module, device: torch.device, test_
         for data in progress_bar(test_loader, parent=mb):
             data = data.to(device)
 
-            output = model(data)
+            output, hc, reconstructioned_hc, z = model(data)
             test_loss += F.cross_entropy(output.view(-1, output.size(2)),
                                          data.view(-1), ignore_index=0, reduction="sum")
+            test_loss += F.mse_loss(hc, reconstructioned_hc, reduction="sum")
+            test_loss += F.mse_loss(z, torch.zeros_like(z), reduction="sum")
 
             pred = output.argmax(dim=2)
             correct += pred.eq(data).sum().item()
@@ -91,6 +95,7 @@ def main() -> None:
                         help='Modelを保存しない')
     parser.add_argument("--save_model", action='store_true', help="modelを保存する")
     parser.add_argument("--seed", type=int, default=0, help="シード値")
+    parser.add_argument("--root", type=str, default="datasets", help="datasetsのflolder")
     args = parser.parse_args()
     print(json.dumps(args.__dict__, indent=2))
 
@@ -106,12 +111,12 @@ def main() -> None:
 
     # Datasetの設定
 
-    train_dataset = SimplifiedDataset("./datasets/train.csv")
+    train_dataset = SimplifiedDataset(f"{args.root}/train.csv")
     train_dataset.analize_vocab(['[PAD]', '[EOS]'] + train_dataset.vocab)
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size,
                               collate_fn=train_dataset.collate, shuffle=True, **kwargs)
 
-    test_dataset = SimplifiedDataset("./datasets/val.csv", vocab=train_dataset.vocab)
+    test_dataset = SimplifiedDataset(f"{args.root}/val.csv", vocab=train_dataset.vocab)
     test_loader = torch.utils.data.DataLoader(
         test_dataset, batch_size=args.test_batch_size, collate_fn=test_dataset.collate, shuffle=False, **kwargs)
 
