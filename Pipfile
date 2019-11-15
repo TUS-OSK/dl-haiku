@@ -16,6 +16,7 @@ torchvision = "~=0.4.1"
 numpy = "~=1.17.3"
 fastprogress = "~=0.1.21"
 tensorboard = "~=2.0.0"
+tqdm = "*"
 
 [requires]
 python_version = "3.7"
