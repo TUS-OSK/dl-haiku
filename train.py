@@ -15,8 +15,8 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from torchvision import datasets, transforms
 
-from dataset import SampleDataset
-from models import SampleNet
+from dataset import SimplifiedDataset
+from models import SimplifiedNet
 
 mb: ConsoleMasterBar
 writer: SummaryWriter
@@ -25,12 +25,13 @@ writer: SummaryWriter
 def train(args: argparse.Namespace, model: nn.Module, device: torch.device, train_loader: DataLoader,
           optimizer: Optimizer, epoch: int) -> None:
     model.train()
-    for batch_idx, (data, target) in enumerate(progress_bar(train_loader, parent=mb)):
-        data, target = data.to(device), target.to(device)
+    for batch_idx, data in enumerate(progress_bar(train_loader, parent=mb)):
+        data = data.to(device)
         optimizer.zero_grad()
 
         output = model(data)
-        loss = F.nll_loss(output, target)
+        raise NotImplementedError
+        loss = F.nll_loss(output)
 
         loss.backward()
         optimizer.step()
@@ -45,15 +46,16 @@ def test(args: argparse.Namespace, model: nn.Module, device: torch.device, test_
          epoch: int) -> None:
     model.eval()
 
-    test_loss = 0
-    correct = 0
+    test_loss: float = 0
+    correct: float = 0
 
     with torch.no_grad():
-        for data, target in progress_bar(test_loader, parent=mb):
-            data, target = data.to(device), target.to(device)
+        for data in progress_bar(test_loader, parent=mb):
+            data = data.to(device)
 
             output = model(data)
-            test_loss += F.nll_loss(output, target, reduction='sum').item()
+            raise NotImplementedError
+            test_loss += F.nll_loss(output, reduction='sum').item()
 
             pred = output.argmax(dim=1, keepdim=True)
             correct += pred.eq(target.view_as(pred)).sum().item()
@@ -76,6 +78,7 @@ def main() -> None:
                         help='CUDAを用いない')
     parser.add_argument('--not-save-model', action='store_false', default=True,
                         help='Modelを保存しない')
+    parser.add_argument("--seed", type=int, default=0, help="シード値")
     args = parser.parse_args()
     print(json.dumps(args.__dict__, indent=2))
 
@@ -90,15 +93,20 @@ def main() -> None:
     kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
 
     # Datasetの設定
-    train_loader = DataLoader(
-        SampleDataset("", train=True),
-        batch_size=args.batch_size, shuffle=True, **kwargs)
+    unique_words = ['*', '+', '-', '/', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '=']
+
+    train_dataset = SimplifiedDataset("./datasets/train.csv", vocab=unique_words,
+                                      transform=transforms.Lambda(lambda x: torch.eye(len(unique_words))[x]))
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size,
+                              collate_fn=train_dataset.collate, shuffle=True, **kwargs)
+
+    test_dataset = SimplifiedDataset("./datasets/val.csv", vocab=unique_words,
+                                     transform=transforms.Lambda(lambda x: torch.eye(len(unique_words))[x]))
     test_loader = torch.utils.data.DataLoader(
-        SampleDataset("", train=False),
-        batch_size=args.test_batch_size, shuffle=False, **kwargs)
+        test_dataset, batch_size=args.test_batch_size, collate_fn=test_dataset.collate, shuffle=False, **kwargs)
 
     # model, optimizerの用意
-    model = SampleNet().to(device)
+    model = SimplifiedNet().to(device)
     optimizer = optim.Adam(model.parameters())
 
     # toolsの用意
