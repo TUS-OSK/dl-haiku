@@ -30,8 +30,7 @@ def train(args: argparse.Namespace, model: nn.Module, device: torch.device, trai
         optimizer.zero_grad()
 
         output = model(data)
-        raise NotImplementedError
-        loss = F.nll_loss(output)
+        loss = F.cross_entropy(output.view(-1, output.size(2)), data.view(-1), ignore_index=0)
 
         loss.backward()
         optimizer.step()
@@ -39,7 +38,15 @@ def train(args: argparse.Namespace, model: nn.Module, device: torch.device, trai
         # Report
         n_iter = (epoch - 1) * len(train_loader) + batch_idx
         with torch.no_grad():
+            pred = output.argmax(dim=2)
+            correct = (pred == data).sum().item() / (data != 1).sum().item()
+
             writer.add_scalar('train/loss', loss.item(), n_iter)
+            writer.add_scalar("train/correct", correct, n_iter)
+            writer.add_text('train/ground_truth',
+                            "".join(train_loader.dataset.reverse_dict[word] for word in data[:, 0].tolist()), n_iter)
+            writer.add_text('train/predict',
+                            "".join(train_loader.dataset.reverse_dict[word] for word in pred[:, 0].tolist()), n_iter)
 
 
 def test(args: argparse.Namespace, model: nn.Module, device: torch.device, test_loader: DataLoader, epoch: int) -> None:
@@ -53,15 +60,20 @@ def test(args: argparse.Namespace, model: nn.Module, device: torch.device, test_
             data = data.to(device)
 
             output = model(data)
-            raise NotImplementedError
-            test_loss += F.nll_loss(output, reduction='sum').item()
+            test_loss += F.cross_entropy(output.view(-1, output.size(2)),
+                                         data.view(-1), ignore_index=0, reduction="sum")
 
-            pred = output.argmax(dim=1, keepdim=True)
-            correct += pred.eq(target.view_as(pred)).sum().item()
+            pred = output.argmax(dim=2)
+            correct += pred.eq(data).sum().item()
 
         # Report
         test_loss /= len(test_loader.dataset)
         writer.add_scalar("val/loss", test_loss, epoch)
+        writer.add_scalar("val/correct", correct, epoch)
+        writer.add_text('val/ground_truth',
+                        "".join(test_loader.dataset.reverse_dict[word] for word in data[:, 0].tolist()), epoch)
+        writer.add_text(
+            'val/predict', "".join(test_loader.dataset.reverse_dict[word] for word in pred[:, 0].tolist()), epoch)
 
 
 def main() -> None:
@@ -71,12 +83,13 @@ def main() -> None:
                         help='学習時のバッチサイズ (default: 64)')
     parser.add_argument('--test-batch-size', type=int, default=64, metavar='N',
                         help='テスト時のバッチサイズ (default: 64)')
-    parser.add_argument('--epochs', type=int, default=10, metavar='N',
+    parser.add_argument('--epochs', type=int, default=100, metavar='N',
                         help='エポック数 (default: 10)')
     parser.add_argument('--no-cuda', action='store_true', default=False,
                         help='CUDAを用いない')
     parser.add_argument('--not-save-model', action='store_false', default=True,
                         help='Modelを保存しない')
+    parser.add_argument("--save_model", action='store_true', help="modelを保存する")
     parser.add_argument("--seed", type=int, default=0, help="シード値")
     args = parser.parse_args()
     print(json.dumps(args.__dict__, indent=2))
@@ -92,20 +105,18 @@ def main() -> None:
     kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
 
     # Datasetの設定
-    unique_words = ['*', '+', '-', '/', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '=']
 
-    train_dataset = SimplifiedDataset("./datasets/train.csv", vocab=unique_words,
-                                      transform=transforms.Lambda(lambda x: torch.eye(len(unique_words))[x]))
+    train_dataset = SimplifiedDataset("./datasets/train.csv")
+    train_dataset.analize_vocab(['[PAD]', '[EOS]'] + train_dataset.vocab)
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size,
                               collate_fn=train_dataset.collate, shuffle=True, **kwargs)
 
-    test_dataset = SimplifiedDataset("./datasets/val.csv", vocab=unique_words,
-                                     transform=transforms.Lambda(lambda x: torch.eye(len(unique_words))[x]))
+    test_dataset = SimplifiedDataset("./datasets/val.csv", vocab=train_dataset.vocab)
     test_loader = torch.utils.data.DataLoader(
         test_dataset, batch_size=args.test_batch_size, collate_fn=test_dataset.collate, shuffle=False, **kwargs)
 
     # model, optimizerの用意
-    model = SimplifiedNet().to(device)
+    model = SimplifiedNet(len(train_dataset.vocab)).to(device)
     optimizer = optim.Adam(model.parameters())
 
     # toolsの用意

@@ -30,6 +30,9 @@ class SimplifiedDataset(Dataset):
         self.transform = transform
 
         self.data = self.load_data(data_file)
+        self.analize_vocab(vocab)
+
+    def analize_vocab(self, vocab=None):
         self.vocab = vocab or self.get_vocab()
         self.vocab_dict = {word: i for i, word in enumerate(self.vocab)}
         self.reverse_dict = {i: word for i, word in enumerate(self.vocab)}
@@ -52,8 +55,8 @@ class SimplifiedDataset(Dataset):
         return len(self.data)
 
     def __getitem__(self, index: int) -> List[str]:
-        sentence = self.data[index]
-        sentence = [self.vocab_dict[word] for word in sentence]
+        sentence = self.data[index] + [self.vocab[1]]  # <EOS>
+        sentence = torch.tensor([self.vocab_dict[word] for word in sentence], dtype=torch.long)
 
         if self.transform is not None:
             sentence = self.transform(sentence)

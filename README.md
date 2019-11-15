@@ -13,7 +13,15 @@
 ```sh=
 git clone git@github.com:TUS-OSK/dl-haiku.git
 cd dl-haiku
-pipenv sync
+pipenv sync --dev
+```
+
+make dataset
+
+```sh=
+mkdir datasets
+python make_simplified_datasets.py -o datasets/train.csv
+python make_simplified_datasets.py -n 100 -o datasets/val.csv
 ```
 
 ## Run
@@ -43,5 +51,5 @@ pipenv run start
 
 - ilim です
 - charon です
-- Mashu(fymeu) です。18才です
-- muhiyuyuyuですこんにちは
+- Mashu(fymeu) です。18 才です
+- muhiyuyuyu ですこんにちは
