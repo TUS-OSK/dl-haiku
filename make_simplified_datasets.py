@@ -2,6 +2,7 @@
 import argparse
 import csv
 import json
+import math
 import random
 from typing import List
 
@@ -9,20 +10,36 @@ import numpy as np
 from tqdm import tqdm
 
 
-def addition(a: int, b: int) -> int:
+def addition(a: float, b: float) -> float:
     return a + b
 
 
-def subtraction(a: int, b: int) -> int:
+def subtraction(a: float, b: float) -> float:
     return a - b
 
 
-def multiplication(a: int, b: int) -> int:
+def multiplication(a: float, b: float) -> float:
     return a * b
 
 
-def division(a: int, b: int) -> int:
-    return a // b
+def division(a: float, b: float) -> float:
+    return a / b
+
+
+def exponentiation(a: float, b: float) -> float:
+    return a ** b
+
+
+def root_extraction(a: float, b: float) -> float:
+    return a ** (1/b)
+
+
+def log(a: float, b: float) -> float:
+    return math.log(a, b)
+
+
+def mod(a: float, b: float) -> float:
+    return a % b
 
 
 operations = [
@@ -30,20 +47,26 @@ operations = [
     ("-", subtraction),
     ("*", multiplication),
     ("/", division),
+    ("^", exponentiation),
+    ("?", root_extraction),
+    ("log", log),
+    ("%", mod)
 ]
 
 
 def make_data() -> str:
-    a = np.random.randint(-100, 100)
     while True:
-        b = np.random.randint(-100, 100)
-        if b != 0:
-            break
+        try:
+            a = np.random.randn()*10
+            b = np.random.randn() * 10
+            operation, func = random.choice(operations)
+            c = func(a, b)
+            if isinstance(c, float):
+                break
+        except:
+            pass
 
-    operation, func = random.choice(operations)
-    c = func(a, b)
-
-    return f"{a}{operation}{b}={c}"
+    return f"{operation}{a:.3}{operation}{b:.3}={c:.3}"
 
 
 def main() -> None:

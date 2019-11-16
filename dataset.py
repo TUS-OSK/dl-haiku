@@ -25,9 +25,10 @@ class SampleDataset(Dataset):
 
 
 class SimplifiedDataset(Dataset):
-    def __init__(self, data_file: str, vocab=None, transform=None) -> None:
+    def __init__(self, data_file: str, vocab=None, transform=None, target_transform=None) -> None:
         self.data_file = data_file
         self.transform = transform
+        self.target_transform = target_transform
 
         self.data = self.load_data(data_file)
         self.analize_vocab(vocab)
@@ -54,19 +55,26 @@ class SimplifiedDataset(Dataset):
     def __len__(self) -> int:
         return len(self.data)
 
-    def __getitem__(self, index: int) -> List[str]:
+    def __getitem__(self, index: int) -> Tuple[torch.Tensor]:
         sentence = self.data[index] + [self.vocab[1]]  # <EOS>
+        condition, sentence = sentence[0], sentence[1:]
         sentence = torch.tensor([self.vocab_dict[word] for word in sentence], dtype=torch.long)
+        condition = torch.tensor([self.vocab_dict[word] for word in condition], dtype=torch.long)
 
         if self.transform is not None:
             sentence = self.transform(sentence)
 
-        return sentence
+        if self.target_transform is not None:
+            condition = self.target_transform(condition)
+
+        return sentence, condition
 
     @staticmethod
-    def collate(batch: List[torch.Tensor]) -> torch.Tensor:
-        batch = pad_sequence(batch)
-        return batch
+    def collate(batch: List[Tuple[torch.Tensor]]) -> torch.Tensor:
+        sentence, condition = zip(*batch)
+        sentence = pad_sequence(sentence)
+        condition = torch.cat(condition)
+        return sentence, condition
 
 
 if __name__ == "__main__":

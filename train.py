@@ -25,14 +25,16 @@ writer: SummaryWriter
 def train(args: argparse.Namespace, model: nn.Module, device: torch.device, train_loader: DataLoader,
           optimizer: Optimizer, epoch: int) -> None:
     model.train()
-    for batch_idx, data in enumerate(progress_bar(train_loader, parent=mb)):
+    for batch_idx, (data, condition) in enumerate(progress_bar(train_loader, parent=mb)):
         data = data.to(device)
+        condition = condition.to(device)
         optimizer.zero_grad()
 
-        output, hc, reconstructioned_hc, z = model(data)
+        output, hc, reconstructioned_hc, z, prior_z = model(data, condition)
         loss = F.cross_entropy(output.view(-1, output.size(2)), data.view(-1), ignore_index=0)
         loss += F.mse_loss(hc, reconstructioned_hc)
         loss += F.mse_loss(z, torch.zeros_like(z))
+        loss += F.mse_loss(z, prior_z)
 
         loss.backward()
         optimizer.step()
@@ -58,14 +60,16 @@ def test(args: argparse.Namespace, model: nn.Module, device: torch.device, test_
     correct: float = 0
 
     with torch.no_grad():
-        for data in progress_bar(test_loader, parent=mb):
+        for data, condition in progress_bar(test_loader, parent=mb):
             data = data.to(device)
+            condition = condition.to(device)
 
-            output, hc, reconstructioned_hc, z = model(data)
+            output, hc, reconstructioned_hc, z, prior_z = model(data, condition)
             test_loss += F.cross_entropy(output.view(-1, output.size(2)),
                                          data.view(-1), ignore_index=0, reduction="sum")
             test_loss += F.mse_loss(hc, reconstructioned_hc, reduction="sum")
             test_loss += F.mse_loss(z, torch.zeros_like(z), reduction="sum")
+            test_loss += F.mse_loss(z, prior_z, reduction="sum")
 
             pred = output.argmax(dim=2)
             correct += pred.eq(data).sum().item()
