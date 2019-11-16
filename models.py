@@ -38,12 +38,21 @@ class SimplifiedEncoder(nn.Module):
     def __init__(self, num_embeddings: int, embedding_dim: int, hidden_dim: int, num_layers: int) -> None:
         super(SimplifiedEncoder, self).__init__()
         self.embedding = nn.Embedding(num_embeddings, embedding_dim, padding_idx=0)
-        self.lstm = nn.LSTM(embedding_dim, hidden_dim, num_layers=num_layers)
-        self.h0 = torch.randn(num_layers, 1, hidden_dim)
-        self.c0 = torch.randn(num_layers, 1, hidden_dim)
+        self.lstm = nn.LSTMCell(embedding_dim, hidden_dim)
+        self.h0 = torch.randn(hidden_dim)
+        self.c0 = torch.randn(hidden_dim)
 
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor]:
-        x = self.embedding(x)
+        embed = self.embedding(x)
+        h = self.h0.expand(x.size(1), -1)
+        c = self.c0.expand(x.size(1), -1)
+        for sentence_words, raw in zip(embed, x):
+            pre_h = h # maskingのため
+            pre_c = c # maskingのため
+            h, c = self.lstm(sentence_words, (h, c))
+            #mask = create_mask(sentence_words) # maskingするべき場所を調べる
+            h = torch.where(raw == 0, pre_h, h) # masking
+            c = torch.where(raw == 0, pre_c, h) # masking
         _, hidden = self.lstm(x, (self.h0.expand(-1, x.size(1), -1), self.c0.expand(-1, x.size(1), -1)))
         return hidden
 
