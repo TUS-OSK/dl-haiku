@@ -31,11 +31,13 @@ def train(args: argparse.Namespace, model: nn.Module, device: torch.device, trai
         optimizer.zero_grad()
 
         output, hc, reconstructioned_hc, z, prior_z = model(data, condition)
-        loss = F.cross_entropy(output.view(-1, output.size(2)), data.view(-1), ignore_index=0)
-        loss += F.mse_loss(hc, reconstructioned_hc)
-        loss += F.mse_loss(z, torch.zeros_like(z))
-        loss += F.mse_loss(z, prior_z)
 
+        lstm_recontruct_loss = F.cross_entropy(output.view(-1, output.size(2)), data.view(-1), ignore_index=0)
+        cvae_reconstruct_loss = F.mse_loss(hc, reconstructioned_hc)
+        cvae_constraint_loss = F.mse_loss(z, torch.zeros_like(z))
+        cvae_prior_loss = F.mse_loss(z, prior_z)
+
+        loss = lstm_recontruct_loss + cvae_reconstruct_loss + cvae_constraint_loss + cvae_prior_loss
         loss.backward()
         optimizer.step()
 
@@ -45,6 +47,10 @@ def train(args: argparse.Namespace, model: nn.Module, device: torch.device, trai
             pred = output.argmax(dim=2)
             correct = (pred == data).sum().item() / (data != 1).sum().item()
 
+            writer.add_scalar('train/lstm_recontruct_loss', lstm_recontruct_loss.item(), n_iter)
+            writer.add_scalar('train/cvae_reconstruct_loss', cvae_reconstruct_loss.item(), n_iter)
+            writer.add_scalar('train/cvae_constraint_loss', cvae_constraint_loss.item(), n_iter)
+            writer.add_scalar('train/cvae_prior_loss', cvae_prior_loss.item(), n_iter)
             writer.add_scalar('train/loss', loss.item(), n_iter)
             writer.add_scalar("train/correct", correct, n_iter)
             writer.add_text('train/ground_truth',
@@ -56,7 +62,11 @@ def train(args: argparse.Namespace, model: nn.Module, device: torch.device, trai
 def test(args: argparse.Namespace, model: nn.Module, device: torch.device, test_loader: DataLoader, epoch: int) -> None:
     model.eval()
 
-    test_loss: float = 0
+    lstm_recontruct_loss: float = 0
+    cvae_reconstruct_loss: float = 0
+    cvae_constraint_loss: float = 0
+    cvae_prior_loss: float = 0
+    loss: float = 0
     correct: float = 0
 
     with torch.no_grad():
@@ -65,18 +75,30 @@ def test(args: argparse.Namespace, model: nn.Module, device: torch.device, test_
             condition = condition.to(device)
 
             output, hc, reconstructioned_hc, z, prior_z = model(data, condition)
-            test_loss += F.cross_entropy(output.view(-1, output.size(2)),
-                                         data.view(-1), ignore_index=0, reduction="sum")
-            test_loss += F.mse_loss(hc, reconstructioned_hc, reduction="sum")
-            test_loss += F.mse_loss(z, torch.zeros_like(z), reduction="sum")
-            test_loss += F.mse_loss(z, prior_z, reduction="sum")
+
+            lstm_recontruct_loss += F.cross_entropy(output.view(-1, output.size(2)), data.view(-1), ignore_index=0,
+                                                    reduction="sum")
+            cvae_reconstruct_loss += F.mse_loss(hc, reconstructioned_hc, reduction="sum")
+            cvae_constraint_loss += F.mse_loss(z, torch.zeros_like(z), reduction="sum")
+            cvae_prior_loss += F.mse_loss(z, prior_z, reduction="sum")
+
+            loss += lstm_recontruct_loss + cvae_reconstruct_loss + cvae_constraint_loss + cvae_prior_loss
 
             pred = output.argmax(dim=2)
             correct += pred.eq(data).sum().item()
 
         # Report
-        test_loss /= len(test_loader.dataset)
-        writer.add_scalar("val/loss", test_loss, epoch)
+        lstm_recontruct_loss /= len(test_loader.dataset)
+        cvae_reconstruct_loss /= len(test_loader.dataset)
+        cvae_constraint_loss /= len(test_loader.dataset)
+        cvae_prior_loss /= len(test_loader.dataset)
+        loss /= len(test_loader.dataset)
+
+        writer.add_scalar("val/lstm_recontruct_loss", lstm_recontruct_loss, epoch)
+        writer.add_scalar("val/cvae_reconstruct_loss", cvae_reconstruct_loss, epoch)
+        writer.add_scalar("val/cvae_constraint_loss", cvae_constraint_loss, epoch)
+        writer.add_scalar("val/cvae_prior_loss", cvae_prior_loss, epoch)
+        writer.add_scalar("val/loss", loss, epoch)
         writer.add_scalar("val/correct", correct, epoch)
         writer.add_text('val/ground_truth',
                         "".join(test_loader.dataset.reverse_dict[word] for word in data[:, 0].tolist()), epoch)
