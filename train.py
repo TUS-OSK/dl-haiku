@@ -30,14 +30,19 @@ def train(args: argparse.Namespace, model: nn.Module, device: torch.device, trai
         condition = condition.to(device)
         optimizer.zero_grad()
 
-        output, hc, reconstructioned_hc, z, prior_z = model(data, condition)
+        # hc: LSTMの出力　shape: [N,16]
+        # reconstructioned_hc: CVAEを通し、再構築したhc　
+        # z: CVAEの出力（潜在変数）　shape: [N, input_output_size]
+        # prior_z: ラベルから推論したz 
+         
+        output, hc, reconstructioned_hc, z, prior_z, mean, log_var = model(data, condition)
 
         lstm_recontruct_loss = F.cross_entropy(output.view(-1, output.size(2)), data.view(-1), ignore_index=0)
-        cvae_reconstruct_loss = F.mse_loss(hc, reconstructioned_hc)
-        cvae_constraint_loss = F.mse_loss(z, torch.zeros_like(z))
+        # cvae_reconstruct_loss = F.mse_loss(hc, reconstructioned_hc)　#　外しても良い
+        cvae_constraint_loss = F.mse_loss(z, torch.zeros_like(z)) # 平均二乗誤差は適切なloss関数ではない
+       #  KLD = -0.5 * torch.sum(1 + log_var - mean.pow(2) - log_var.exp())#
         cvae_prior_loss = F.mse_loss(z, prior_z)
-
-        loss = lstm_recontruct_loss + cvae_reconstruct_loss + cvae_constraint_loss + cvae_prior_loss
+        loss = lstm_recontruct_loss + cvae_constraint_loss + cvae_prior_loss #　cvae_reconstruct_lossは、なくてもいいから消した　
         loss.backward()
         optimizer.step()
 
