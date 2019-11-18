@@ -38,11 +38,15 @@ def train(args: argparse.Namespace, model: nn.Module, device: torch.device, trai
         output, hc, reconstructioned_hc, z, prior_z, mean, log_var = model(data, condition)
 
         lstm_recontruct_loss = F.cross_entropy(output.view(-1, output.size(2)), data.view(-1), ignore_index=0) #BCE
+        
         # cvae_reconstruct_loss = F.mse_loss(hc, reconstructioned_hc)　#　外しても良い
         #cvae_constraint_loss = F.mse_loss(z, torch.zeros_like(z)) # 平均二乗誤差は適切なloss関数ではない
         KLD = -0.5 * torch.sum(1 + log_var - mean.pow(2) - log_var.exp()) # KLD
-        cvae_prior_loss = F.mse_loss(z, prior_z)
-        loss = lstm_recontruct_loss + KLD # 論文にしたがってCVAEのlossを設定
+        #cvae_prior_loss = F.mse_loss(z, prior_z) #平均二条誤差は適切なloss関数ではない
+        
+        cvae_priore_loss = F.binary_cross_entropy( z,prior_z, reduction='none') # zとprior_zの２値分類
+        
+        loss =  cvae_priore_loss + lstm_recontruct_loss + KLD # 論文にしたがってCVAEのlossを設定 
         loss.backward()
         optimizer.step()
 
