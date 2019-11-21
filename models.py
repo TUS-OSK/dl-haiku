@@ -28,11 +28,11 @@ class SimplifiedNet(nn.Module):
     def forward(self, x: torch.Tensor, condition: torch.Tensor) -> torch.Tensor:
         h, c = self.encoder(x)
         hc = torch.cat([h, c], dim=0).permute(1, 0, 2).reshape(x.size(1), -1)
-        reconstructioned_hc, z, mean, log_var, prior_z = self.cvae(hc, condition)
+        reconstructioned_hc, z, mean, log_var, prior_mean, prior_log_var = self.cvae(hc, condition)
         h, c = reconstructioned_hc.view(reconstructioned_hc.size(0), h.size(0) +
                                         c.size(0), -1).permute(1, 0, 2).chunk(2, dim=0)
         x = self.decoder(torch.cat([torch.ones(1, x.size(1), dtype=torch.long), x[1:]], dim=0), h, c)
-        return x, hc, reconstructioned_hc, z, prior_z,
+        return x, z, mean, log_var, prior_mean, prior_log_var
 
 
 class SimplifiedEncoder(nn.Module):
@@ -67,42 +67,34 @@ class SimplifiedCVAE(nn.Module):
     def __init__(self, input_output_size: int, num_embeddings: int, condition_size: int, latent_size: int) -> None:
         super(SimplifiedCVAE, self).__init__()
         self.embedding = nn.Embedding(num_embeddings, condition_size, padding_idx=0)
-        self.fc_mean = nn.Sequential(
+        self.encoder = nn.Sequential(
             nn.Linear(input_output_size + condition_size, input_output_size + condition_size),
             nn.ReLU(),
-            nn.Linear(input_output_size + condition_size, latent_size))
-        self.fc_logvar = nn.Sequential(
-            nn.Linear(input_output_size + condition_size, input_output_size + condition_size),
+            nn.Linear(input_output_size + condition_size, latent_size*2)
+        )
+        self.prior = nn.Sequential(
+            nn.Linear(condition_size, latent_size*2),
             nn.ReLU(),
-            nn.Linear(input_output_size + condition_size, latent_size),
-            nn.ReLU()
-            )
-
-        self.fc_c = nn.Sequential(
-            nn.Linear(condition_size, latent_size),
-            nn.ReLU(),
-            nn.Linear(latent_size, latent_size))
-
-        self.fc2 = nn.Sequential(
+            nn.Linear(latent_size*2, latent_size*2)
+        )
+        self.decoder = nn.Sequential(
             nn.Linear(latent_size + condition_size, input_output_size),
             nn.ReLU(),
-            nn.Linear(input_output_size, input_output_size))
-        
-    def reparameterize(self, mean, log_var):
-            std = torch.exp(0.5*log_var)
-            eps = torch.randn_like(std)
-            
-            return mean + eps*std
+            nn.Linear(input_output_size, input_output_size)
+        )
 
-    def forward(self, x: torch.Tensor, condition: torch.Tensor) -> Tuple[torch.Tensor]: # x shape: [N, 16]
-        condition = self.embedding(condition)  # shape: [N, condition_size]
+    def reparameterize(self, mean: torch.Tensor, log_var: torch.Tensor) -> torch.Tensor:
+        std = torch.exp(0.5*log_var)
+        eps = torch.randn_like(std)
 
-        mean = self.fc_mean(torch.cat([x, condition], dim=1)) # shape: [N, latent_size]
-        log_var = self.fc_logvar(torch.cat([x, condition], dim=1)) # shape: [N, latent_size]
+        return mean + eps*std
 
-        z = self.reparameterize(mean, log_var) # shape: [N, latent_size]
-        z = F.softmax(z) # zを確率にする
-        prior_z = self.fc_c(condition) # バッチ？ごとの潜在変数zを出力（季語ラベルから潜在変数zを推論） shape: [N, latent_size] 
-        prior_z = F.softmax(prior_z) # prior_z（条件からのz）を確率にする
-        x = self.fc2(torch.cat([z, condition], dim=1)) # shape: [N, input_output_size]
-        return x, z, mean, log_var, prior_z
+    def forward(self, x: torch.Tensor, condition: torch.Tensor) -> Tuple[torch.Tensor]:
+        condition = self.embedding(condition)
+
+        mean, log_var = self.encoder(torch.cat([x, condition], dim=1)).chunk(2, dim=1)
+        prior_mean, prior_log_var = self.prior(condition).chunk(2, dim=1)
+
+        z = self.reparameterize(mean, log_var)
+        x = self.decoder(torch.cat([z, condition], dim=1))
+        return x, z, mean, log_var, prior_mean, prior_log_var

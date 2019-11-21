@@ -30,25 +30,14 @@ def train(args: argparse.Namespace, model: nn.Module, device: torch.device, trai
         condition = condition.to(device)
         optimizer.zero_grad()
 
-        # hc: LSTMの出力　shape: [N,16]
-        # reconstructioned_hc: CVAEを通し、再構築したhc　
-        # z: CVAEの出力（潜在変数）　shape: [N, input_output_size]
-        # prior_z: ラベルから推論したz 
-         
-        output, hc, reconstructioned_hc, z, prior_z, mean, log_var = model(data, condition)
+        output, z, mean, log_var, prior_mean, prior_log_var = model(data, condition)
 
-        lstm_recontruct_loss = F.cross_entropy(output.view(-1, output.size(2)), data.view(-1), ignore_index=0) #BCE
-        
-        # cvae_reconstruct_loss = F.mse_loss(hc, reconstructioned_hc)　#　外しても良い
-        #cvae_constraint_loss = F.mse_loss(z, torch.zeros_like(z)) # 平均二乗誤差は適切なloss関数ではない
-        KLD = -0.5 * torch.sum(1 + log_var - mean.pow(2) - log_var.exp()) # KLD
-        #cvae_prior_loss = F.mse_loss(z, prior_z) #平均二条誤差は適切なloss関数ではない
-        
-        cvae_priore_loss = F.binary_cross_entropy( z,prior_z, reduction='none') # zとprior_zの２値分類
-        
-        loss_f = nn.KLDivloss() 
-        loss = loss_f(z,prior_z) + lstm_recontruct_loss # KLDの計算
-        #loss =  cvae_priore_loss + lstm_recontruct_loss  + KLD # 論文にしたがってCVAEのlossを設定 (使わない)
+        recontruct_loss = F.cross_entropy(output.view(-1, output.size(2)), data.view(-1), ignore_index=0)
+        cvae_constraint_loss = -0.5 * torch.sum(1 + log_var - mean.pow(2) - log_var.exp(), dim=1).mean()
+        prior_loss = -0.5 * torch.sum(1 + log_var - prior_log_var - (mean - prior_mean).pow(
+            2) * prior_log_var.exp() - log_var.exp() * prior_log_var.exp(), dim=1).mean()
+
+        loss = recontruct_loss + cvae_constraint_loss + prior_loss
         loss.backward()
         optimizer.step()
 
@@ -58,10 +47,9 @@ def train(args: argparse.Namespace, model: nn.Module, device: torch.device, trai
             pred = output.argmax(dim=2)
             correct = (pred == data).sum().item() / (data != 1).sum().item()
 
-            writer.add_scalar('train/lstm_recontruct_loss', lstm_recontruct_loss.item(), n_iter)
-            writer.add_scalar('train/cvae_reconstruct_loss', cvae_reconstruct_loss.item(), n_iter)
+            writer.add_scalar('train/recontruct_loss', recontruct_loss.item(), n_iter)
             writer.add_scalar('train/cvae_constraint_loss', cvae_constraint_loss.item(), n_iter)
-            writer.add_scalar('train/cvae_prior_loss', cvae_prior_loss.item(), n_iter)
+            writer.add_scalar('train/prior_loss', prior_loss.item(), n_iter)
             writer.add_scalar('train/loss', loss.item(), n_iter)
             writer.add_scalar("train/correct", correct, n_iter)
             writer.add_text('train/ground_truth',
@@ -73,10 +61,9 @@ def train(args: argparse.Namespace, model: nn.Module, device: torch.device, trai
 def test(args: argparse.Namespace, model: nn.Module, device: torch.device, test_loader: DataLoader, epoch: int) -> None:
     model.eval()
 
-    lstm_recontruct_loss: float = 0
-    cvae_reconstruct_loss: float = 0
+    recontruct_loss: float = 0
     cvae_constraint_loss: float = 0
-    cvae_prior_loss: float = 0
+    prior_loss: float = 0
     loss: float = 0
     correct: float = 0
 
@@ -85,30 +72,28 @@ def test(args: argparse.Namespace, model: nn.Module, device: torch.device, test_
             data = data.to(device)
             condition = condition.to(device)
 
-            output, hc, reconstructioned_hc, z, prior_z = model(data, condition)
+            output, z, mean, log_var, prior_mean, prior_log_var = model(data, condition)
 
-            lstm_recontruct_loss += F.cross_entropy(output.view(-1, output.size(2)), data.view(-1), ignore_index=0,
-                                                    reduction="sum")
-            cvae_reconstruct_loss += F.mse_loss(hc, reconstructioned_hc, reduction="sum")
-            cvae_constraint_loss += F.mse_loss(z, torch.zeros_like(z), reduction="sum")
-            cvae_prior_loss += F.mse_loss(z, prior_z, reduction="sum")
+            recontruct_loss += F.cross_entropy(
+                output.view(-1, output.size(2)), data.view(-1), ignore_index=0, reduction="sum")
+            cvae_constraint_loss += -0.5 * torch.sum(1 + log_var - mean.pow(2) - log_var.exp()) 
+            prior_loss += -0.5 * torch.sum(1 + log_var - prior_log_var - (mean - prior_mean).pow(
+                2) * prior_log_var.exp() - log_var.exp() * prior_log_var.exp())
 
-            loss += lstm_recontruct_loss + cvae_reconstruct_loss + cvae_constraint_loss + cvae_prior_loss
+            loss += recontruct_loss + cvae_constraint_loss
 
             pred = output.argmax(dim=2)
             correct += pred.eq(data).sum().item()
 
         # Report
-        lstm_recontruct_loss /= len(test_loader.dataset)
-        cvae_reconstruct_loss /= len(test_loader.dataset)
+        recontruct_loss /= len(test_loader.dataset)
         cvae_constraint_loss /= len(test_loader.dataset)
-        cvae_prior_loss /= len(test_loader.dataset)
+        prior_loss /= len(test_loader.dataset)
         loss /= len(test_loader.dataset)
 
-        writer.add_scalar("val/lstm_recontruct_loss", lstm_recontruct_loss, epoch)
-        writer.add_scalar("val/cvae_reconstruct_loss", cvae_reconstruct_loss, epoch)
+        writer.add_scalar("val/recontruct_loss", recontruct_loss, epoch)
         writer.add_scalar("val/cvae_constraint_loss", cvae_constraint_loss, epoch)
-        writer.add_scalar("val/cvae_prior_loss", cvae_prior_loss, epoch)
+        writer.add_scalar("val/prior_loss", prior_loss, epoch)
         writer.add_scalar("val/loss", loss, epoch)
         writer.add_scalar("val/correct", correct, epoch)
         writer.add_text('val/ground_truth',
