@@ -26,19 +26,13 @@ class SimplifiedNet(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         h, c = self.encoder(x)
-        print("h",h, "h.shape", h.shape)
-        print("cat", torch.cat([h, c], dim = 1), "cat.shape", torch.cat([h, c], dim = 1).shape)
-        #hc = torch.cat([h, c], dim=0).permute(1, 0, 2).reshape(x.size(1), -1)
         hc = torch.cat([h, c], dim = 1)
         reconstructioned_hc, z = self.cvae(hc)
-        print("rec.shape", reconstructioned_hc.shape)
-        #print("h.shape", h.shape, "c.shape", c.shape)
 
         #ここまで修正しました（64*16のhc）
 
-        h, c = reconstructioned_hc.view(reconstructioned_hc.size(0), h.size(0) +
-                                        c.size(0), -1).permute(1, 0, 2).chunk(2, dim=0)
-        x = self.decoder(torch.cat([torch.ones(1, x.size(1), dtype=torch.long), x[1:]], dim=0), h, c)
+        h, c = reconstructioned_hc.chunk(2, dim=1)
+        x = self.decoder(torch.cat([torch.ones(1, x.size(1), dtype=torch.long), x[1:]], dim=0), h.unsqueeze(0), c.unsqueeze(0))
         return x, hc, reconstructioned_hc, z
 
 
@@ -59,14 +53,8 @@ class SimplifiedEncoder(nn.Module):
             pre_h = h # maskingのため
             pre_c = c # maskingのため
             h, c = self.lstm(sentence_words, (h, c))
-            h = torch.t(h)
-            c = torch.t(c)
-            pre_h = torch.t(pre_h)
-            pre_c = torch.t(pre_c)
-            h = torch.where(raw == 0, pre_h, h) # masking
-            c = torch.where(raw == 0, pre_c, c) # masking
-            h = torch.t(h)
-            c = torch.t(c)
+            h = torch.where(raw == 0, pre_h.transpose(0, 1), h.transpose(0, 1)).transpose(0, 1) # masking
+            c = torch.where(raw == 0, pre_c.transpose(0, 1), c.transpose(0, 1)).transpose(0, 1) # masking
 
         """_, hidden = self.lstm(x, (self.h0.expand(-1, x.size(1), -1), self.c0.expand(-1, x.size(1), -1)))
         return hidden"""
