@@ -88,7 +88,7 @@ class SimplifiedCVAE(nn.Module):
             nn.ReLU(),
             nn.Linear(input_output_size, input_output_size))
         
-        def reparameterize(self, mean, log_var):
+    def reparameterize(self, mean, log_var):
             std = torch.exp(0.5*log_var)
             eps = torch.randn_like(std)
             
@@ -101,8 +101,8 @@ class SimplifiedCVAE(nn.Module):
         log_var = self.fc_logvar(torch.cat([x, condition], dim=1)) # shape: [N, latent_size]
 
         z = self.reparameterize(mean, log_var) # shape: [N, latent_size]
-
-        prior_z = self.fc_c(condition) # バッチ？ごとの潜在変数zを出力（ラベルから潜在変数zを推論） shape: [N, latent_size] 
-        
+        z = F.softmax(z) # zを確率にする
+        prior_z = self.fc_c(condition) # バッチ？ごとの潜在変数zを出力（季語ラベルから潜在変数zを推論） shape: [N, latent_size] 
+        prior_z = F.softmax(prior_z) # prior_z（条件からのz）を確率にする
         x = self.fc2(torch.cat([z, condition], dim=1)) # shape: [N, input_output_size]
         return x, z, mean, log_var, prior_z

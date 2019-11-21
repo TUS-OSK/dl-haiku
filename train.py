@@ -46,7 +46,9 @@ def train(args: argparse.Namespace, model: nn.Module, device: torch.device, trai
         
         cvae_priore_loss = F.binary_cross_entropy( z,prior_z, reduction='none') # zとprior_zの２値分類
         
-        loss =  cvae_priore_loss + lstm_recontruct_loss + KLD # 論文にしたがってCVAEのlossを設定 
+        loss_f = nn.KLDivloss() 
+        loss = loss_f(z,prior_z) + lstm_recontruct_loss # KLDの計算
+        #loss =  cvae_priore_loss + lstm_recontruct_loss  + KLD # 論文にしたがってCVAEのlossを設定 (使わない)
         loss.backward()
         optimizer.step()
 
