@@ -20,6 +20,7 @@ class SimplifiedNet(nn.Module):
     def __init__(self, num_embeddings: int, embedding_dim: int = 2, lstm_hidden_dim: int = 8,
                  lstm_num_layers: int = 1, cvae_latent_size: int = 2) -> None:
         super(SimplifiedNet, self).__init__()
+        assert lstm_num_layers == 1
         self.encoder = SimplifiedEncoder(num_embeddings, embedding_dim, lstm_hidden_dim, lstm_num_layers)
         self.cvae = SimplifiedCVAE(lstm_hidden_dim * lstm_num_layers * 2,
                                    num_embeddings, embedding_dim, cvae_latent_size)
@@ -27,11 +28,13 @@ class SimplifiedNet(nn.Module):
 
     def forward(self, x: torch.Tensor, condition: torch.Tensor) -> torch.Tensor:
         h, c = self.encoder(x)
-        hc = torch.cat([h, c], dim=0).permute(1, 0, 2).reshape(x.size(1), -1)
+        hc = torch.cat([h, c], dim=1)
+
         reconstructioned_hc, z, mean, log_var, prior_mean, prior_log_var = self.cvae(hc, condition)
-        h, c = reconstructioned_hc.view(reconstructioned_hc.size(0), h.size(0) +
-                                        c.size(0), -1).permute(1, 0, 2).chunk(2, dim=0)
-        x = self.decoder(torch.cat([torch.ones(1, x.size(1), dtype=torch.long), x[1:]], dim=0), h, c)
+
+        h, c = reconstructioned_hc.chunk(2, dim=1)
+        x = self.decoder(torch.cat([torch.ones(1, x.size(1), dtype=torch.long), x[1:]],
+                                   dim=0), h.unsqueeze(0), c.unsqueeze(0))
         return x, z, mean, log_var, prior_mean, prior_log_var
 
 
@@ -39,14 +42,22 @@ class SimplifiedEncoder(nn.Module):
     def __init__(self, num_embeddings: int, embedding_dim: int, hidden_dim: int, num_layers: int) -> None:
         super(SimplifiedEncoder, self).__init__()
         self.embedding = nn.Embedding(num_embeddings, embedding_dim, padding_idx=0)
-        self.lstm = nn.LSTM(embedding_dim, hidden_dim, num_layers=num_layers)
-        self.h0 = torch.randn(num_layers, 1, hidden_dim)
-        self.c0 = torch.randn(num_layers, 1, hidden_dim)
+        self.lstm = nn.LSTMCell(embedding_dim, hidden_dim)
+        self.h0 = torch.randn(hidden_dim)
+        self.c0 = torch.randn(hidden_dim)
 
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor]:
-        x = self.embedding(x)
-        _, hidden = self.lstm(x, (self.h0.expand(-1, x.size(1), -1), self.c0.expand(-1, x.size(1), -1)))
-        return hidden
+        embed = self.embedding(x)
+        h = self.h0.expand(x.size(1), -1)
+        c = self.c0.expand(x.size(1), -1)
+
+        for sentence_words, raw in zip(embed, x):
+            pre_h = h
+            pre_c = c
+            h, c = self.lstm(sentence_words, (h, c))
+            h = torch.where(raw == 0, pre_h.transpose(0, 1), h.transpose(0, 1)).transpose(0, 1)
+            c = torch.where(raw == 0, pre_c.transpose(0, 1), c.transpose(0, 1)).transpose(0, 1)
+        return h, c
 
 
 class SimplifiedDecoder(nn.Module):
