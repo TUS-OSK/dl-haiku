@@ -105,7 +105,7 @@ def test(args: argparse.Namespace, model: nn.Module, device: torch.device, test_
 def main() -> None:
     # Training settings
     parser = argparse.ArgumentParser(description='dl-haiku')
-    parser.add_argument('--batch-size', type=int, default=64, metavar='N',
+    parser.add_argument('--batch-size', type=int, default=43, metavar='N',
                         help='学習時のバッチサイズ (default: 64)')
     parser.add_argument('--test-batch-size', type=int, default=64, metavar='N',
                         help='テスト時のバッチサイズ (default: 64)')

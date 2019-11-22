@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 import csv
-from typing import Dict, List, Tuple, Set
+from pathlib import Path
+from typing import Dict, List, Set, Tuple
 
 import torch
 from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import Dataset
 from tqdm import tqdm
-
-from pathlib import Path
 
 
 class SampleDataset(Dataset):
@@ -157,8 +156,9 @@ class HaikuDataset(Dataset):
     @staticmethod
     def collate(batch: List[Tuple[torch.Tensor]]) -> torch.Tensor:
         sentence, condition = zip(*batch)
-        sentence = pad_sequence(sentence)
-        condition = torch.stack(condition)
+        sorted_index = torch.tensor([len(s) for s in sentence]).argsort(descending=True)
+        sentence = pad_sequence(sentence)[:, sorted_index]
+        condition = torch.stack(condition)[sorted_index]
         return sentence, condition
 
 
