@@ -16,12 +16,11 @@ cd dl-haiku
 pipenv sync --dev
 ```
 
-make dataset
+download dataset
 
 ```sh=
-mkdir datasets
-python make_simplified_datasets.py -o datasets/train.csv
-python make_simplified_datasets.py -n 100 -o datasets/val.csv
+git submodule init
+git submodule update
 ```
 
 ## Run

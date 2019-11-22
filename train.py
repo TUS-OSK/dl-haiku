@@ -134,7 +134,7 @@ def main() -> None:
     # Datasetの設定
 
     train_dataset = SimplifiedDataset(f"{args.root}/train.csv")
-    train_dataset.analize_vocab(['[PAD]', '[EOS]'] + train_dataset.vocab)
+    train_dataset.analize_vocab(['[PAD]', '[EOS]', "[UNK]"] + train_dataset.vocab)
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size,
                               collate_fn=train_dataset.collate, shuffle=True, **kwargs)
 
