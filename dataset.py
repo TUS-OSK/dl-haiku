@@ -158,7 +158,7 @@ class HaikuDataset(Dataset):
     def collate(batch: List[Tuple[torch.Tensor]]) -> torch.Tensor:
         sentence, condition = zip(*batch)
         sentence = pad_sequence(sentence)
-        condition = torch.cat(condition)
+        condition = torch.stack(condition)
         return sentence, condition
 
 

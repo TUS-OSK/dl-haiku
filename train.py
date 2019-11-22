@@ -15,7 +15,7 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from torchvision import datasets, transforms
 
-from dataset import SimplifiedDataset
+from dataset import HaikuDataset
 from models import SimplifiedNet
 
 mb: ConsoleMasterBar
@@ -133,12 +133,12 @@ def main() -> None:
 
     # Datasetの設定
 
-    train_dataset = SimplifiedDataset(f"{args.root}/train.csv")
+    train_dataset = HaikuDataset(args.root, train=True)
     train_dataset.analize_vocab(['[PAD]', '[EOS]', "[UNK]"] + train_dataset.vocab)
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size,
                               collate_fn=train_dataset.collate, shuffle=True, **kwargs)
 
-    test_dataset = SimplifiedDataset(f"{args.root}/val.csv", vocab=train_dataset.vocab)
+    test_dataset = HaikuDataset(args.root, vocab=train_dataset.vocab, train=False)
     test_loader = torch.utils.data.DataLoader(
         test_dataset, batch_size=args.test_batch_size, collate_fn=test_dataset.collate, shuffle=False, **kwargs)
 
