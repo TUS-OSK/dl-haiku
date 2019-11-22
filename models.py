@@ -15,7 +15,7 @@ class SampleNet(nn.Module):
 
 
 class SimplifiedNet(nn.Module):
-    def __init__(self, num_embeddings: int, embedding_dim: int = 32, lstm_hidden_dim: int = 64,
+    def __init__(self, num_embeddings: int, embedding_dim: int = 64, lstm_hidden_dim: int = 128,
                  lstm_num_layers: int = 4, cvae_latent_size: int = 64) -> None:
         super(SimplifiedNet, self).__init__()
         self.encoder = SimplifiedEncoder(num_embeddings, embedding_dim, lstm_hidden_dim, lstm_num_layers)
@@ -51,7 +51,7 @@ class SimplifiedEncoder(nn.Module):
         super(SimplifiedEncoder, self).__init__()
         self.embedding = nn.Embedding(num_embeddings, embedding_dim, padding_idx=0)
         self.lstm = [nn.LSTMCell(embedding_dim, hidden_dim)] + \
-                    [nn.LSTMCell(hidden_dim, hidden_dim) for _ in range(num_layers)]
+                    [nn.LSTMCell(hidden_dim, hidden_dim) for _ in range(num_layers - 1)]
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
 
@@ -81,7 +81,7 @@ class SimplifiedDecoder(nn.Module):
         super(SimplifiedDecoder, self).__init__()
         self.embedding = nn.Embedding(num_embeddings, embedding_dim, padding_idx=0)
         self.lstm = [nn.LSTMCell(embedding_dim, hidden_dim)] + \
-                    [nn.LSTMCell(hidden_dim, hidden_dim) for _ in range(num_layers)]
+                    [nn.LSTMCell(hidden_dim, hidden_dim) for _ in range(num_layers - 1)]
         self.fc = nn.Linear(hidden_dim, num_embeddings)
 
         self.embedding_dim = embedding_dim
@@ -135,15 +135,27 @@ class SimplifiedCVAE(nn.Module):
         self.encoder = nn.Sequential(
             nn.Linear(input_output_size + condition_size, input_output_size + condition_size),
             nn.ReLU(),
+            nn.Linear(input_output_size + condition_size, input_output_size + condition_size),
+            nn.ReLU(),
+            nn.Linear(input_output_size + condition_size, input_output_size + condition_size),
+            nn.ReLU(),
             nn.Linear(input_output_size + condition_size, latent_size * 2)
         )
         self.prior = nn.Sequential(
             nn.Linear(condition_size, latent_size * 2),
             nn.ReLU(),
+            nn.Linear(latent_size * 2, latent_size * 2),
+            nn.ReLU(),
+            nn.Linear(latent_size * 2, latent_size * 2),
+            nn.ReLU(),
             nn.Linear(latent_size * 2, latent_size * 2)
         )
         self.decoder = nn.Sequential(
             nn.Linear(latent_size + condition_size, input_output_size),
+            nn.ReLU(),
+            nn.Linear(input_output_size, input_output_size),
+            nn.ReLU(),
+            nn.Linear(input_output_size, input_output_size),
             nn.ReLU(),
             nn.Linear(input_output_size, input_output_size)
         )
