@@ -2,6 +2,7 @@
 from typing import Tuple
 
 import torch
+import torch.nn.functional as F
 from torch import nn
 
 
@@ -35,6 +36,14 @@ class SimplifiedNet(nn.Module):
             .transpose(0, 1).chunk(2, dim=0)
         x = self.decoder(torch.cat([torch.ones(1, x.size(1), dtype=torch.long), x[1:]], dim=0), h, c)
         return x, z, mean, log_var, prior_mean, prior_log_var
+
+    def infer(self, condition: torch.Tensor) -> torch.Tensor:
+        reconstructioned_hc = self.cvae.infer(condition)
+
+        h, c = reconstructioned_hc.view(condition.size(0), self.lstm_num_layers * 2, self.lstm_hidden_dim) \
+            .transpose(0, 1).chunk(2, dim=0)
+        x = self.decoder.infer(h, c)
+        return x
 
 
 class SimplifiedEncoder(nn.Module):
@@ -71,14 +80,52 @@ class SimplifiedDecoder(nn.Module):
     def __init__(self, num_embeddings: int, embedding_dim: int, hidden_dim: int, num_layers: int) -> None:
         super(SimplifiedDecoder, self).__init__()
         self.embedding = nn.Embedding(num_embeddings, embedding_dim, padding_idx=0)
-        self.lstm = nn.LSTM(embedding_dim, hidden_dim, num_layers=num_layers)
+        self.lstm = [nn.LSTMCell(embedding_dim, hidden_dim)] + \
+                    [nn.LSTMCell(hidden_dim, hidden_dim) for _ in range(num_layers)]
         self.fc = nn.Linear(hidden_dim, num_embeddings)
+
+        self.embedding_dim = embedding_dim
+        self.hidden_dim = hidden_dim
+        self.num_layers = num_layers
 
     def forward(self, x: torch.Tensor, h: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
         x = self.embedding(x)
-        x, _ = self.lstm(x, (h, c))
+        hiddens = [list(hidden) for hidden in zip(h.unbind(0), c.unbind(0))]
+        outputs = []
+
+        for sentence_words in x:
+            for lstm, hidden in zip(self.lstm, hiddens):
+                h, c = lstm(sentence_words, hidden)
+                sentence_words = h
+                hidden[0] = h
+                hidden[1] = c
+            outputs.append(h)
+
+        x = torch.stack(outputs)
         x = self.fc(x)
         return x
+
+    def infer(self, h: torch.Tensor, c: torch.Tensor, max_length: int = 20) -> torch.Tensor:
+        hiddens = [list(hidden) for hidden in zip(h.unbind(0), c.unbind(0))]
+        outputs = []
+
+        sentence_words = torch.zeros(h.size(1), self.embedding_dim)
+
+        for _ in range(max_length):
+            for lstm, hidden in zip(self.lstm, hiddens):
+                h, c = lstm(sentence_words, hidden)
+                sentence_words = h
+                hidden[0] = h
+                hidden[1] = c
+            output = self.fc(h)
+            output = torch.cat([output[:, 1:2], output[:, 3:]], dim=1)
+            output = F.softmax(output, dim=1)
+            output = output.argmax(1)
+            output = torch.where(output == 0, torch.ones_like(output), output + 2)
+            outputs.append(output)
+            sentence_words = self.embedding(output)
+        output = torch.stack(outputs, 1)
+        return output
 
 
 class SimplifiedCVAE(nn.Module):
@@ -116,3 +163,12 @@ class SimplifiedCVAE(nn.Module):
         z = self.reparameterize(mean, log_var)
         x = self.decoder(torch.cat([z, condition], dim=1))
         return x, z, mean, log_var, prior_mean, prior_log_var
+
+    def infer(self, condition: torch.Tensor) -> torch.Tensor:
+        condition = self.embedding(condition)
+
+        prior_mean, prior_log_var = self.prior(condition).chunk(2, dim=1)
+
+        z = self.reparameterize(prior_mean, prior_log_var)
+        x = self.decoder(torch.cat([z, condition], dim=1))
+        return x
