@@ -34,7 +34,7 @@ def train(args: argparse.Namespace, model: nn.Module, device: torch.device, trai
 
         recontruct_loss = F.cross_entropy(output.view(-1, output.size(2)), data.view(-1), ignore_index=0)
         cvae_constraint_loss = -0.5 * torch.sum(1 + log_var - mean.pow(2) - log_var.exp(), dim=1).mean()
-        prior_loss = -0.5 * torch.sum(1 + log_var - prior_log_var - (mean - prior_mean).pow(
+        prior_loss = -0.5 * torch.sum(1 + log_var + prior_log_var - (mean - prior_mean).pow(
             2) * prior_log_var.exp() - log_var.exp() * prior_log_var.exp(), dim=1).mean()
 
         loss = recontruct_loss + cvae_constraint_loss + prior_loss
@@ -77,7 +77,7 @@ def test(args: argparse.Namespace, model: nn.Module, device: torch.device, test_
             recontruct_loss += F.cross_entropy(
                 output.view(-1, output.size(2)), data.view(-1), ignore_index=0, reduction="sum")
             cvae_constraint_loss += -0.5 * torch.sum(1 + log_var - mean.pow(2) - log_var.exp())
-            prior_loss += -0.5 * torch.sum(1 + log_var - prior_log_var - (mean - prior_mean).pow(
+            prior_loss += -0.5 * torch.sum(1 + log_var + prior_log_var - (mean - prior_mean).pow(
                 2) * prior_log_var.exp() - log_var.exp() * prior_log_var.exp())
 
             loss += recontruct_loss + cvae_constraint_loss
