@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from typing import Tuple
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import nn
@@ -31,18 +32,19 @@ class SimplifiedNet(nn.Module):
 
         reconstructioned_hc, z, mean, log_var, prior_mean, prior_log_var = self.cvae(
             hc.transpose(0, 1).reshape(x.size(1), -1), condition)
+        reconstructioned_hc = reconstructioned_hc.view(x.size(1), self.lstm_num_layers * 2,
+                                                       self.lstm_hidden_dim).transpose(0, 1)
+        h, c = reconstructioned_hc.chunk(2, dim=0)
 
-        h, c = reconstructioned_hc.view(x.size(1), self.lstm_num_layers * 2, self.lstm_hidden_dim) \
-            .transpose(0, 1).chunk(2, dim=0)
         x = self.decoder(torch.cat([torch.ones(1, x.size(1), dtype=torch.long), x[1:]], dim=0), h, c)
-        return x, z, mean, log_var, prior_mean, prior_log_var
+        return x, z, hc, reconstructioned_hc, mean, log_var, prior_mean, prior_log_var
 
-    def infer(self, condition: torch.Tensor) -> torch.Tensor:
+    def infer(self, condition: torch.Tensor, temp: float) -> torch.Tensor:
         reconstructioned_hc = self.cvae.infer(condition)
 
         h, c = reconstructioned_hc.view(condition.size(0), self.lstm_num_layers * 2, self.lstm_hidden_dim) \
             .transpose(0, 1).chunk(2, dim=0)
-        x = self.decoder.infer(h, c)
+        x = self.decoder.infer(h, c, temp=temp)
         return x
 
 
@@ -105,7 +107,7 @@ class SimplifiedDecoder(nn.Module):
         x = self.fc(x)
         return x
 
-    def infer(self, h: torch.Tensor, c: torch.Tensor, max_length: int = 20) -> torch.Tensor:
+    def infer(self, h: torch.Tensor, c: torch.Tensor, max_length: int = 20, temp: float = 1) -> torch.Tensor:
         hiddens = [list(hidden) for hidden in zip(h.unbind(0), c.unbind(0))]
         outputs = []
 
@@ -119,8 +121,8 @@ class SimplifiedDecoder(nn.Module):
                 hidden[1] = c
             output = self.fc(h)
             output = torch.cat([output[:, 1:2], output[:, 3:]], dim=1)
-            output = F.softmax(output, dim=1)
-            output = output.argmax(1)
+            output = F.softmax(output * temp, dim=1)
+            output = torch.tensor([np.random.choice(a=np.arange(output.size(1)), p=o) for o in output.numpy()])
             output = torch.where(output == 0, torch.ones_like(output), output + 2)
             outputs.append(output)
             sentence_words = self.embedding(output)

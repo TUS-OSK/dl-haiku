@@ -30,16 +30,17 @@ def train(args: argparse.Namespace, model: nn.Module, device: torch.device, trai
         condition = condition.to(device)
         optimizer.zero_grad()
 
-        output, z, mean, log_var, prior_mean, prior_log_var = model(data, condition)
+        output, z, hc, reconstructioned_hc, mean, log_var, prior_mean, prior_log_var = model(data, condition)
 
         recontruct_loss = F.cross_entropy(
             output.view(-1, output.size(2)), torch.where(data.view(-1) == 2, torch.zeros_like(data.view(-1)),
                                                          data.view(-1)), ignore_index=0)
+        cvae_recontruct_loss = (hc-reconstructioned_hc).pow(2).mean()
         cvae_constraint_loss = -0.5 * torch.sum(1 + log_var - mean.pow(2) - log_var.exp(), dim=1).mean()
-        prior_loss = -0.5 * torch.sum(1 + log_var + prior_log_var - (mean - prior_mean).pow(
-            2) / prior_log_var.exp() - log_var.exp() * prior_log_var.exp(), dim=1).mean()
+        prior_loss = -0.5 * torch.sum(1 - log_var + prior_log_var - (mean - prior_mean).pow(
+            2) / log_var.exp() - prior_log_var.exp() / log_var.exp(), dim=1).mean()
 
-        loss = recontruct_loss + cvae_constraint_loss + prior_loss
+        loss = recontruct_loss + cvae_constraint_loss + prior_loss + cvae_recontruct_loss
         loss.backward()
         optimizer.step()
 
@@ -50,6 +51,7 @@ def train(args: argparse.Namespace, model: nn.Module, device: torch.device, trai
             correct = (pred == data).sum().item() / (data != 1).sum().item()
 
             writer.add_scalar('train/recontruct_loss', recontruct_loss.item(), n_iter)
+            writer.add_scalar('train/cvae_recontruct_loss', cvae_recontruct_loss.item(), n_iter)
             writer.add_scalar('train/cvae_constraint_loss', cvae_constraint_loss.item(), n_iter)
             writer.add_scalar('train/prior_loss', prior_loss.item(), n_iter)
             writer.add_scalar('train/loss', loss.item(), n_iter)
@@ -74,13 +76,13 @@ def test(args: argparse.Namespace, model: nn.Module, device: torch.device, test_
             data = data.to(device)
             condition = condition.to(device)
 
-            output, z, mean, log_var, prior_mean, prior_log_var = model(data, condition)
+            output, z, hc, reconstructioned_hc, mean, log_var, prior_mean, prior_log_var = model(data, condition)
 
             recontruct_loss += F.cross_entropy(
                 output.view(-1, output.size(2)), data.view(-1), ignore_index=0, reduction="sum")
             cvae_constraint_loss += -0.5 * torch.sum(1 + log_var - mean.pow(2) - log_var.exp())
-            prior_loss += -0.5 * torch.sum(1 + log_var + prior_log_var - (mean - prior_mean).pow(
-                2) * prior_log_var.exp() - log_var.exp() * prior_log_var.exp())
+            prior_loss += -0.5 * torch.sum(1 - log_var + prior_log_var - (mean - prior_mean).pow(
+                2) / log_var.exp() - prior_log_var.exp() / log_var.exp())
 
             loss += recontruct_loss + cvae_constraint_loss
 
@@ -118,7 +120,7 @@ def main() -> None:
     parser.add_argument('--not-save-model', action='store_false', default=True,
                         help='Modelを保存しない')
     parser.add_argument("--save_model", action='store_true', help="modelを保存する")
-    parser.add_argument('--model', type=str, default="model_1.pt", help='保存したモデル')
+    parser.add_argument('--model', type=str, default="", help='保存したモデル')
     parser.add_argument("--seed", type=int, default=0, help="シード値")
     parser.add_argument("--root", type=str, default="datasets", help="datasetsのflolder")
     args = parser.parse_args()
@@ -147,7 +149,8 @@ def main() -> None:
 
     # model, optimizerの用意
     model = SimplifiedNet(len(train_dataset.vocab)).to(device)
-    model.load_state_dict(torch.load(args.model))
+    if args.model:
+        model.load_state_dict(torch.load(args.model))
     optimizer = optim.Adam(model.parameters())
 
     # toolsの用意

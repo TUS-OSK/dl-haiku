@@ -13,15 +13,17 @@ from models import SimplifiedNet
 
 
 def infer(args: argparse.Namespace, model: nn.Module, device: torch.device, condition: torch.Tensor,
-          vocab: Dataset) -> str:
+          vocab: Dataset, temp: float) -> str:
     model.eval()
 
     with torch.no_grad():
         condition = condition.to(device)
-        output = model.infer(condition)[0]
+        output = model.infer(condition, temp)[0]
         output = [vocab.reverse_dict[word] for word in output.tolist()]
-
-        return output[:output.index("[EOS]")]
+        try:
+            return output[:output.index("[EOS]")]
+        except ValueError:
+            return output
 
 
 def main() -> None:
@@ -56,8 +58,8 @@ def main() -> None:
     # 推論
     for kigo in dataset.vocab_dict:
         data = torch.tensor([dataset.vocab_dict[kigo]])
-        result = infer(args, model, device, data, dataset)
-        print(f"{kigo}: {result}")
+        result = infer(args, model, device, data, dataset, 4)
+        print(f"{kigo}: {''.join(result)}")
 
 
 if __name__ == "__main__":
