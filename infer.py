@@ -54,9 +54,10 @@ def main() -> None:
     model.load_state_dict(torch.load(args.model))
 
     # 推論
-    data = torch.tensor([dataset.vocab_dict["春"]])
-    result = infer(args, model, device, data, dataset)
-    print(result)
+    for kigo in dataset.vocab_dict:
+        data = torch.tensor([dataset.vocab_dict[kigo]])
+        result = infer(args, model, device, data, dataset)
+        print(f"{kigo}: {result}")
 
 
 if __name__ == "__main__":

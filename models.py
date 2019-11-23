@@ -15,8 +15,8 @@ class SampleNet(nn.Module):
 
 
 class SimplifiedNet(nn.Module):
-    def __init__(self, num_embeddings: int, embedding_dim: int = 64, lstm_hidden_dim: int = 128,
-                 lstm_num_layers: int = 4, cvae_latent_size: int = 64) -> None:
+    def __init__(self, num_embeddings: int, embedding_dim: int = 32, lstm_hidden_dim: int = 32,
+                 lstm_num_layers: int = 2, cvae_latent_size: int = 32) -> None:
         super(SimplifiedNet, self).__init__()
         self.encoder = SimplifiedEncoder(num_embeddings, embedding_dim, lstm_hidden_dim, lstm_num_layers)
         self.cvae = SimplifiedCVAE(lstm_hidden_dim * lstm_num_layers * 2,
@@ -109,7 +109,7 @@ class SimplifiedDecoder(nn.Module):
         hiddens = [list(hidden) for hidden in zip(h.unbind(0), c.unbind(0))]
         outputs = []
 
-        sentence_words = torch.zeros(h.size(1), self.embedding_dim)
+        sentence_words = torch.ones(h.size(1), self.embedding_dim)
 
         for _ in range(max_length):
             for lstm, hidden in zip(self.lstm, hiddens):

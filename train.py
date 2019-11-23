@@ -32,10 +32,12 @@ def train(args: argparse.Namespace, model: nn.Module, device: torch.device, trai
 
         output, z, mean, log_var, prior_mean, prior_log_var = model(data, condition)
 
-        recontruct_loss = F.cross_entropy(output.view(-1, output.size(2)), data.view(-1), ignore_index=0)
+        recontruct_loss = F.cross_entropy(
+            output.view(-1, output.size(2)), torch.where(data.view(-1) == 2, torch.zeros_like(data.view(-1)),
+                                                         data.view(-1)), ignore_index=0)
         cvae_constraint_loss = -0.5 * torch.sum(1 + log_var - mean.pow(2) - log_var.exp(), dim=1).mean()
         prior_loss = -0.5 * torch.sum(1 + log_var + prior_log_var - (mean - prior_mean).pow(
-            2) * prior_log_var.exp() - log_var.exp() * prior_log_var.exp(), dim=1).mean()
+            2) / prior_log_var.exp() - log_var.exp() * prior_log_var.exp(), dim=1).mean()
 
         loss = recontruct_loss + cvae_constraint_loss + prior_loss
         loss.backward()
@@ -105,7 +107,7 @@ def test(args: argparse.Namespace, model: nn.Module, device: torch.device, test_
 def main() -> None:
     # Training settings
     parser = argparse.ArgumentParser(description='dl-haiku')
-    parser.add_argument('--batch-size', type=int, default=43, metavar='N',
+    parser.add_argument('--batch-size', type=int, default=256, metavar='N',
                         help='学習時のバッチサイズ (default: 64)')
     parser.add_argument('--test-batch-size', type=int, default=64, metavar='N',
                         help='テスト時のバッチサイズ (default: 64)')
@@ -116,6 +118,7 @@ def main() -> None:
     parser.add_argument('--not-save-model', action='store_false', default=True,
                         help='Modelを保存しない')
     parser.add_argument("--save_model", action='store_true', help="modelを保存する")
+    parser.add_argument('--model', type=str, default="model_1.pt", help='保存したモデル')
     parser.add_argument("--seed", type=int, default=0, help="シード値")
     parser.add_argument("--root", type=str, default="datasets", help="datasetsのflolder")
     args = parser.parse_args()
@@ -144,6 +147,7 @@ def main() -> None:
 
     # model, optimizerの用意
     model = SimplifiedNet(len(train_dataset.vocab)).to(device)
+    model.load_state_dict(torch.load(args.model))
     optimizer = optim.Adam(model.parameters())
 
     # toolsの用意
